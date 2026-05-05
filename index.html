@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PHILYBOTICS™ HUB</title>
+
+<style>
+/* ===== FIXED LAYOUT ===== */
+body{ margin:0; font-family:Arial; background:#f5f7fa; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+.top-header{ position:fixed; top:0; left:0; width:100%; background:white; padding:12px 15px; display:flex; align-items:center; gap:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); z-index:99999; }
+.admin-btn{ font-size:20px; padding:10px; background:#eee; border-radius:8px; cursor:pointer; }
+.title{font-weight:bold;font-size:16px;}
+.main{ flex:1; margin-top:70px; margin-bottom:70px; overflow:hidden; }
+#pages{ display:flex; width:300%; height:100%; transition:transform .35s cubic-bezier(.22,.61,.36,1); }
+.page{ width:100%; flex-shrink:0; padding:15px; overflow-y:auto; }
+.card{ background:white; margin:15px 0; padding:15px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+#dots{ position:fixed; bottom:70px; width:100%; text-align:center; z-index:999; }
+.dot{ height:10px; width:10px; margin:0 5px; background:#ccc; display:inline-block; border-radius:50%; }
+.dot.active{ background:#000; transform:scale(1.3); }
+footer{ position:fixed; bottom:0; left:0; width:100%; background:#111; color:#fff; padding:20px; text-align:center; }
+#admin-modal{ display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:100000; }
+.modal{ background:white; padding:20px; border-radius:10px; width:90%; max-width:350px; }
+#admin-dashboard{ display:none; position:fixed; inset:0; background:#f5f7fa; overflow:auto; padding:15px; z-index:100001; }
+input,textarea{ width:100%; padding:10px; margin:5px 0; border:1px solid #ddd; border-radius:6px; box-sizing: border-box; }
+button{ padding:8px; margin:3px; border:none; border-radius:6px; cursor:pointer; background:#eee; }
+
+/* ===== EDITOR ===== */
+#editor-wrapper{ background:#fff; border:1px solid #ddd; border-radius:8px; min-height:300px; padding:10px; }
+/* FIX #2: Default editable paragraph so user can write immediately */
+#editor{ min-height:260px; outline:none; }
+#editor:empty:before{ content:"Start writing here..."; color:#aaa; pointer-events:none; }
+
+.editor-tabs{ display:flex; background:#eee; }
+.editor-tabs button{ flex:1; padding:10px; border:none; background:#ddd; cursor:pointer; margin:0; border-radius:0; }
+.editor-tabs button.active{ background:#fff; font-weight:bold; }
+.toolbar{ display:none; padding:10px; border-bottom:1px solid #ddd; flex-wrap:wrap; gap:10px; background: #fff; }
+.toolbar.active{ display:flex; }
+.group{ display:flex; gap:5px; background:#f5f5f5; padding:5px; border-radius:6px; }
+
+/* ===== BLOCK STYLES ===== */
+.block{
+  background:#fff; padding:10px; margin:10px 0; border-radius:8px;
+  border:1px solid #eee; cursor:text; position:relative;
+}
+.block[contenteditable="true"]:focus{ outline:2px solid #007bff; }
+.block img{ max-width:100%; border-radius:8px; display:block; }
+
+/* FIX #1: Block controls toolbar */
+.block-controls{
+  display:none;
+  position:absolute;
+  top:4px; right:4px;
+  gap:3px;
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:6px;
+  padding:3px;
+  z-index:10;
+}
+.block:hover .block-controls{ display:flex; }
+.block-controls button{
+  padding:2px 6px;
+  font-size:12px;
+  background:#f5f5f5;
+  border:1px solid #ccc;
+  border-radius:4px;
+  cursor:pointer;
+  margin:0;
+  line-height:1.4;
+}
+.block-controls button:hover{ background:#e0e0e0; }
+
+/* Drag handle via pseudo-element only when NOT showing controls overlay */
+.block::before{ content:"⋮⋮"; cursor:grab; margin-right:10px; color:#aaa; }
+
+.scroll-box{ max-height:200px; overflow-y:auto; background:#fff; padding:10px; border-radius:8px; border:1px solid #ddd; }
+.product-img{ width:100%; height:150px; object-fit:cover; border-radius:8px; }
+
+/* ===== FIX #4: Preview & Fullscreen overlays with close buttons ===== */
+#preview-overlay{
+  display:none;
+  position:fixed; inset:0;
+  background:#fff;
+  z-index:200000;
+  overflow:auto;
+  padding:30px;
+}
+#preview-overlay .close-btn{
+  position:fixed; top:15px; right:15px;
+  background:#333; color:#fff;
+  border:none; border-radius:8px;
+  padding:8px 14px; font-size:14px;
+  cursor:pointer; z-index:200001;
+}
+#preview-content{
+  max-width:750px; margin:0 auto;
+  font-family:Georgia,serif; font-size:17px; line-height:1.8;
+}
+
+/* Fullscreen close button (overlaid on top of the native fullscreen) */
+#fs-close-btn{
+  display:none;
+  position:fixed; top:15px; right:15px;
+  background:#333; color:#fff;
+  border:none; border-radius:8px;
+  padding:8px 14px; font-size:14px;
+  cursor:pointer; z-index:300000;
+}
+</style>
+</head>
+
+<body>
+
+<header class="top-header">
+<div class="admin-btn" onclick="openAdmin()">⚙️</div>
+<div class="title">PHILYBOTICS™ HUB</div>
+</header>
+
+<div class="main">
+<div id="pages">
+
+<div class="page">
+<input id="search" placeholder="Search..." oninput="searchBlog()">
+<div id="blog-page"></div>
+</div>
+
+<div class="page">
+<h2>SHOP</h2>
+<div id="shop-products"></div>
+<h3>Cart</h3>
+<div id="cart"></div>
+<h3 id="total"></h3>
+<button onclick="checkout()">Checkout</button>
+</div>
+
+<div class="page"><h2>APPS</h2></div>
+
+</div>
+</div>
+
+<div id="dots">
+<span class="dot"></span>
+<span class="dot"></span>
+<span class="dot"></span>
+</div>
+
+<footer>© PHILYBOTICS™</footer>
+
+<!-- LOGIN -->
+<div id="admin-modal">
+<div class="modal">
+<input type="password" id="adminPass" placeholder="Password">
+<button onclick="handleAuth()">Enter</button>
+</div>
+</div>
+
+<!-- ADMIN -->
+<div id="admin-dashboard">
+
+<h2>ADMIN PANEL</h2>
+<button onclick="logout()">Logout</button>
+<hr>
+
+<h2>BLOG EDITOR</h2>
+<input id="title" placeholder="Title">
+<input id="excerpt" placeholder="Excerpt">
+<input id="category" placeholder="Category">
+<input id="tags" placeholder="Tags">
+
+<!-- ===== PRO EDITOR ===== -->
+<div id="editor-system">
+
+<!-- TABS -->
+<div class="editor-tabs">
+  <button onclick="switchTab('home')" class="active">Home</button>
+  <button onclick="switchTab('insert')">Insert</button>
+  <button onclick="switchTab('layout')">Layout</button>
+  <button onclick="switchTab('review')">Review</button>
+  <button onclick="switchTab('view')">View</button>
+</div>
+
+<!-- HOME -->
+<div class="toolbar tab active" id="tab-home">
+  <div class="group">
+    <button onclick="execCmd('undo')">↺</button>
+    <button onclick="execCmd('redo')">↻</button>
+  </div>
+  <div class="group">
+    <select onchange="setFont(this.value)">
+      <option value="Arial">Arial</option>
+      <option value="Times New Roman">Times</option>
+      <option value="Courier New">Courier</option>
+    </select>
+    <select onchange="setFontSize(this.value)">
+      <option value="1">10</option>
+      <option value="3">16</option>
+      <option value="5">24</option>
+      <option value="7">36</option>
+    </select>
+  </div>
+  <div class="group">
+    <button onclick="execCmd('bold')"><b>B</b></button>
+    <button onclick="execCmd('italic')"><i>I</i></button>
+    <button onclick="execCmd('underline')"><u>U</u></button>
+    <button onclick="execCmd('strikeThrough')"><s>S</s></button>
+  </div>
+  <div class="group">
+    <button onclick="execCmd('insertUnorderedList')">•</button>
+    <button onclick="execCmd('insertOrderedList')">1.</button>
+  </div>
+  <div class="group">
+    <button onclick="align('left')">⬅</button>
+    <button onclick="align('center')">⬌</button>
+    <button onclick="align('right')">➡</button>
+    <button onclick="align('justify')">☰</button>
+  </div>
+  <div class="group">
+    <input type="color" title="Text Color" onchange="setColor(this.value)">
+    <input type="color" title="Highlight" onchange="setBg(this.value)">
+  </div>
+</div>
+
+<!-- INSERT — FIX #2 (Text removed) + FIX #3 (duplicates removed) -->
+<div class="toolbar tab" id="tab-insert">
+  <div class="group">
+    <button onclick="insertLink()">🔗 Link</button>
+    <button onclick="uploadImage()">🖼️ Image</button>
+    <button onclick="insertTable()">📋 Table</button>
+    <button onclick="insertCode()">💻 Code</button>
+    <button onclick="insertQuote()">❝ Quote</button>
+    <button onclick="insertToggle()">▶ Toggle</button>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="toolbar tab" id="tab-layout">
+  <div class="group">
+    <button onclick="setAlign('left')">Left</button>
+    <button onclick="setAlign('center')">Center</button>
+    <button onclick="setAlign('right')">Right</button>
+  </div>
+  <div class="group">
+    <button onclick="addSpacing()">+ Space</button>
+    <button onclick="removeSpacing()">- Space</button>
+  </div>
+</div>
+
+<!-- REVIEW -->
+<div class="toolbar tab" id="tab-review">
+  <div class="group">
+    <button onclick="wordCount()">Word Count</button>
+    <button onclick="spellCheck()">Spell Check</button>
+  </div>
+</div>
+
+<!-- VIEW — FIX #4 -->
+<div class="toolbar tab" id="tab-view">
+  <div class="group">
+    <button onclick="openPreview()">👁 Preview</button>
+    <button onclick="enterFullscreen()">⛶ Fullscreen</button>
+  </div>
+</div>
+
+<!-- FIX #2: editor is a contenteditable div — writable immediately -->
+<div id="editor-wrapper">
+  <div id="editor" contenteditable="true"></div>
+</div>
+
+</div><!-- /editor-system -->
+
+<button onclick="publish()" style="margin-top:10px;background:#007bff;color:#fff;padding:10px 20px;">Publish</button>
+
+<h3>Posts</h3>
+<div id="admin-posts" class="scroll-box"></div>
+<hr>
+
+<h2>SHOP MANAGEMENT</h2>
+<input id="pname" placeholder="Product Name">
+<input id="pprice" type="number" placeholder="Price">
+<input type="file" id="pimage">
+<input id="pcolor" placeholder="Color">
+<input id="psize" placeholder="Size">
+<textarea id="pdesc" placeholder="Description"></textarea>
+<input id="pstock" type="number" placeholder="Stock">
+<button onclick="addProduct()">Save Product</button>
+
+<h3>Products</h3>
+<div id="admin-products" class="scroll-box"></div>
+
+<h3>Orders</h3>
+<div id="orders" class="scroll-box"></div>
+
+</div><!-- /admin-dashboard -->
+
+<!-- FIX #4: Preview overlay with close button -->
+<div id="preview-overlay">
+  <button class="close-btn" onclick="closePreview()">✕ Close Preview</button>
+  <div id="preview-content"></div>
+</div>
+
+<!-- FIX #4: Fullscreen close button (shown on top of fullscreen element) -->
+<button id="fs-close-btn" onclick="exitFullscreen()">✕ Exit Fullscreen</button>
+
+<script>
+
+/* ===== DOM REFERENCES ===== */
+const adminModal  = document.getElementById("admin-modal");
+const adminPass   = document.getElementById("adminPass");
+const adminDash   = document.getElementById("admin-dashboard");
+const editor      = document.getElementById("editor");
+const previewOverlay = document.getElementById("preview-overlay");
+const previewContent = document.getElementById("preview-content");
+const fsCloseBtn     = document.getElementById("fs-close-btn");
+
+/* ===== SWIPE ENGINE ===== */
+const pages = document.getElementById("pages");
+let current=0, startX=0, isDragging=false;
+
+function goToPage(i){
+  current=Math.max(0,Math.min(2,i));
+  pages.style.transform=`translateX(-${current*100}%)`;
+  updateDots();
+}
+
+document.addEventListener("touchstart",e=>startX=e.touches[0].clientX);
+document.addEventListener("touchend",e=>{
+  let diff=startX-e.changedTouches[0].clientX;
+  if(Math.abs(diff)>50){ diff>0?goToPage(current+1):goToPage(current-1); }
+});
+
+document.addEventListener("mousedown",e=>{
+  if(e.target.closest("#admin-dashboard")) return; // don't interfere with admin
+  isDragging=true; startX=e.clientX;
+  pages.style.transition="none";
+});
+document.addEventListener("mousemove",e=>{
+  if(!isDragging)return;
+  pages.style.transform=`translateX(${(-current*window.innerWidth)+e.clientX-startX}px)`;
+});
+document.addEventListener("mouseup",e=>{
+  if(!isDragging)return;
+  isDragging=false; pages.style.transition="";
+  let diff=startX-e.clientX;
+  Math.abs(diff)>80?(diff>0?goToPage(current+1):goToPage(current-1)):goToPage(current);
+});
+
+function updateDots(){
+  document.querySelectorAll(".dot").forEach((d,i)=>d.classList.toggle("active",i===current));
+}
+updateDots();
+
+/* ===== ADMIN AUTH ===== */
+async function hash(t){
+  const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+function openAdmin(){ adminModal.style.display="flex"; adminPass.value=""; }
+async function handleAuth(){
+  let p=adminPass.value;
+  if(!p) return alert("Enter password");
+  if(!localStorage.adminHash){ localStorage.adminHash=await hash(p); }
+  else if(await hash(p)!==localStorage.adminHash) return alert("Wrong password");
+  adminModal.style.display="none";
+  adminDash.style.display="block";
+  adminPass.value="";
+}
+function logout(){ adminDash.style.display="none"; }
+
+/* ===== TAB SYSTEM ===== */
+function switchTab(tab){
+  document.querySelectorAll(".editor-tabs button").forEach(b=>b.classList.remove("active"));
+  event.target.classList.add("active");
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.getElementById("tab-"+tab).classList.add("active");
+}
+
+/* ===== CORE COMMAND ENGINE ===== */
+function execCmd(c,val=null){ editor.focus(); document.execCommand(c,false,val); }
+function cmd(c,v=null){ editor.focus(); document.execCommand(c,false,v); }
+
+/* ===== FONT / COLOR / ALIGN ===== */
+function setFont(f){ execCmd("fontName",f); }
+function setFontSize(s){ execCmd("fontSize",s); }
+function setColor(c){ execCmd("foreColor",c); }
+function setBg(c){ execCmd("hiliteColor",c); }
+function align(type){
+  if(type==="left")    execCmd("justifyLeft");
+  if(type==="center")  execCmd("justifyCenter");
+  if(type==="right")   execCmd("justifyRight");
+  if(type==="justify") execCmd("justifyFull");
+}
+function setAlign(type){ align(type); }
+
+/* ===== INSERT FUNCTIONS ===== */
+function insertLink(){
+  let url=prompt("Enter URL:");
+  if(url) execCmd("createLink",url);
+}
+
+/* FIX #3: Single Image/Upload function — opens file picker, embeds as base64 */
+function uploadImage(){
+  let input=document.createElement("input");
+  input.type="file"; input.accept="image/*";
+  input.onchange=()=>{
+    let file=input.files[0];
+    let reader=new FileReader();
+    reader.onload=()=>{
+      let img=document.createElement("img");
+      img.src=reader.result;
+      img.style.maxWidth="100%";
+      img.style.borderRadius="8px";
+      img.style.display="block";
+      img.style.margin="8px 0";
+      editor.focus();
+      // Insert at cursor if possible, else append
+      let sel=window.getSelection();
+      if(sel && sel.rangeCount){
+        let range=sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(img);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+        editor.appendChild(img);
+      }
+      saveDraft();
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+/* FIX #3: Single Code block function */
+function insertCode(){
+  let pre=document.createElement("pre");
+  pre.contentEditable="true";
+  pre.style.cssText="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-family:Courier New,monospace;font-size:14px;white-space:pre-wrap;outline:none;";
+  pre.textContent="// write your code here";
+  editor.focus();
+  let sel=window.getSelection();
+  if(sel && sel.rangeCount){
+    let range=sel.getRangeAt(0);
+    range.collapse(false);
+    range.insertNode(pre);
+    // move cursor inside
+    range.selectNodeContents(pre);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    editor.appendChild(pre);
+  }
+  saveDraft();
+}
+
+/* FIX #3: Single Quote block function */
+function insertQuote(){
+  let bq=document.createElement("blockquote");
+  bq.contentEditable="true";
+  bq.style.cssText="border-left:4px solid #007bff;margin:10px 0;padding:10px 16px;background:#f0f4ff;color:#333;font-style:italic;border-radius:0 6px 6px 0;outline:none;";
+  bq.textContent="Type your quote here...";
+  editor.focus();
+  let sel=window.getSelection();
+  if(sel && sel.rangeCount){
+    let range=sel.getRangeAt(0);
+    range.collapse(false);
+    range.insertNode(bq);
+    range.selectNodeContents(bq);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    editor.appendChild(bq);
+  }
+  saveDraft();
+}
+
+function insertTable(){
+  let tbl=document.createElement("table");
+  tbl.setAttribute("border","1");
+  tbl.style.cssText="width:100%;margin:10px 0;border-collapse:collapse;";
+  tbl.innerHTML=`<tr><td style="padding:6px;">Cell 1</td><td style="padding:6px;">Cell 2</td></tr>
+                  <tr><td style="padding:6px;">Cell 3</td><td style="padding:6px;">Cell 4</td></tr>`;
+  editor.appendChild(tbl);
+  saveDraft();
+}
+
+function insertToggle(){
+  let det=document.createElement("details");
+  det.style.cssText="margin:10px 0;border:1px solid #ddd;border-radius:6px;padding:8px;";
+  let sum=document.createElement("summary");
+  sum.contentEditable="true";
+  sum.style.cursor="pointer";
+  sum.textContent="Toggle Title";
+  let p=document.createElement("p");
+  p.contentEditable="true";
+  p.textContent="Toggle content here...";
+  det.appendChild(sum);
+  det.appendChild(p);
+  editor.appendChild(det);
+  saveDraft();
+}
+
+/* ===== LAYOUT ===== */
+function addSpacing(){ editor.innerHTML+="<br><br>"; }
+function removeSpacing(){ document.execCommand("delete"); }
+
+/* ===== REVIEW ===== */
+function wordCount(){
+  let text=editor.innerText.trim();
+  let count=text?text.split(/\s+/).length:0;
+  alert("Words: "+count);
+}
+function spellCheck(){
+  editor.setAttribute("spellcheck","true");
+  alert("Spellcheck Enabled");
+}
+
+/* ===== FIX #4: PREVIEW ===== */
+function openPreview(){
+  previewContent.innerHTML = editor.innerHTML;
+  previewOverlay.style.display="block";
+}
+function closePreview(){
+  previewOverlay.style.display="none";
+}
+
+/* ===== FIX #4: FULLSCREEN with close button ===== */
+function enterFullscreen(){
+  let wrapper=document.getElementById("editor-wrapper");
+  if(wrapper.requestFullscreen){
+    wrapper.requestFullscreen();
+  } else if(wrapper.webkitRequestFullscreen){
+    wrapper.webkitRequestFullscreen();
+  }
+  fsCloseBtn.style.display="block";
+}
+function exitFullscreen(){
+  if(document.exitFullscreen)      document.exitFullscreen();
+  else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+  fsCloseBtn.style.display="none";
+}
+document.addEventListener("fullscreenchange",()=>{
+  if(!document.fullscreenElement) fsCloseBtn.style.display="none";
+});
+document.addEventListener("webkitfullscreenchange",()=>{
+  if(!document.webkitFullscreenElement) fsCloseBtn.style.display="none";
+});
+
+/* ===== SAVE DRAFT ===== */
+function saveDraft(){
+  localStorage.draft=editor.innerHTML;
+}
+function loadDraft(){
+  if(localStorage.draft) editor.innerHTML=localStorage.draft;
+}
+editor.addEventListener("input",saveDraft);
+
+/* ===== BLOG PUBLISH ===== */
+let editingId=null;
+
+function publish(){
+  let content=editor.innerHTML;
+  let post={
+    id: editingId || Date.now(),
+    title: document.getElementById("title").value,
+    excerpt: document.getElementById("excerpt").value,
+    category: document.getElementById("category").value,
+    tags: document.getElementById("tags").value.split(","),
+    content
+  };
+  savePost(post);
+  editingId=null;
+  localStorage.removeItem("draft");
+  editor.innerHTML="";
+  renderBlog();
+  renderAdminPosts();
+}
+
+/* ===== DATABASE (IndexedDB) ===== */
+let db;
+function initDB(){
+  let req=indexedDB.open("philyDB",1);
+  req.onupgradeneeded=e=>{
+    db=e.target.result;
+    db.createObjectStore("posts",{keyPath:"id"});
+  };
+  req.onsuccess=e=>{
+    db=e.target.result;
+    loadDraft();
+    renderBlog();
+    renderAdminPosts();
+  };
+}
+function savePost(post){
+  let tx=db.transaction("posts","readwrite");
+  tx.objectStore("posts").put(post);
+}
+function getPosts(cb){
+  let tx=db.transaction("posts","readonly");
+  let req=tx.objectStore("posts").getAll();
+  req.onsuccess=()=>cb(req.result.reverse());
+}
+function deletePostDB(id){
+  let tx=db.transaction("posts","readwrite");
+  tx.objectStore("posts").delete(id);
+}
+
+/* ===== ADMIN POSTS ===== */
+const blogPage   = document.getElementById("blog-page");
+const adminPosts = document.getElementById("admin-posts");
+
+function renderBlog(){
+  getPosts(posts=>{
+    blogPage.innerHTML=posts.map(p=>`
+      <div class="card" onclick="openPost(${p.id})">
+        <h2>${p.title}</h2>
+        <p>${p.excerpt}</p>
+      </div>`).join("");
+  });
+}
+
+function renderAdminPosts(){
+  getPosts(posts=>{
+    adminPosts.innerHTML=posts.map(p=>`
+      <div class="card">
+        ${p.title}
+        <button onclick="editPost(${p.id})">Edit</button>
+        <button onclick="deletePost(${p.id})">Delete</button>
+      </div>`).join("");
+  });
+}
+
+function editPost(id){
+  getPosts(posts=>{
+    let p=posts.find(x=>x.id===id);
+    editingId=id;
+    document.getElementById("title").value=p.title;
+    document.getElementById("excerpt").value=p.excerpt;
+    document.getElementById("category").value=p.category;
+    document.getElementById("tags").value=p.tags.join(",");
+    editor.innerHTML=p.content;
+  });
+}
+
+function deletePost(id){
+  deletePostDB(id);
+  renderBlog();
+  renderAdminPosts();
+}
+
+function searchBlog(){
+  let q=document.getElementById("search").value.toLowerCase();
+  getPosts(posts=>{
+    let filtered=posts.filter(p=>
+      p.title.toLowerCase().includes(q)||
+      p.excerpt.toLowerCase().includes(q)||
+      (p.tags||[]).join(" ").toLowerCase().includes(q)
+    );
+    blogPage.innerHTML=filtered.map(p=>`
+      <div class="card" onclick="openPost(${p.id})">
+        <h2>${p.title}</h2><p>${p.excerpt}</p>
+      </div>`).join("");
+  });
+}
+
+/* ===== IMAGE CLICK TO RESIZE ===== */
+document.addEventListener("click",e=>{
+  if(e.target.tagName==="IMG"){
+    let img=e.target;
+    img.style.resize="both";
+    img.style.overflow="auto";
+    img.style.display="block";
+  }
+});
+
+/* ===== SHOP ===== */
+const shopProducts = document.getElementById("shop-products");
+const adminProducts= document.getElementById("admin-products");
+const orders       = document.getElementById("orders");
+const cart         = document.getElementById("cart");
+const total        = document.getElementById("total");
+
+function getImageBase64(f){
+  return new Promise(r=>{let rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(f);});
+}
+
+async function addProduct(){
+  let img=document.getElementById("pimage").files[0]?await getImageBase64(document.getElementById("pimage").files[0]):"";
+  let p=JSON.parse(localStorage.products||"[]");
+  p.push({
+    id:Date.now(),
+    name:document.getElementById("pname").value,
+    price:+document.getElementById("pprice").value,
+    image:img,
+    color:document.getElementById("pcolor").value,
+    size:document.getElementById("psize").value,
+    desc:document.getElementById("pdesc").value,
+    stock:+document.getElementById("pstock").value
+  });
+  localStorage.products=JSON.stringify(p);
+  renderShop(); renderAdminProducts();
+}
+
+function renderShop(){
+  let p=JSON.parse(localStorage.products||"[]");
+  shopProducts.innerHTML=p.map(x=>`
+    <div class="card">
+      <img src="${x.image}" class="product-img">
+      <h3>${x.name}</h3><p>${x.desc}</p><p>₵${x.price}</p>
+      <button onclick="addToCart(${x.id})">Add to Cart</button>
+    </div>`).join("");
+}
+
+function renderAdminProducts(){
+  let p=JSON.parse(localStorage.products||"[]");
+  adminProducts.innerHTML=p.map(x=>`
+    <div class="card">${x.name}
+      <button onclick="deleteProduct(${x.id})">Delete</button>
+    </div>`).join("");
+}
+
+function deleteProduct(id){
+  let p=JSON.parse(localStorage.products).filter(x=>x.id!==id);
+  localStorage.products=JSON.stringify(p);
+  renderShop(); renderAdminProducts();
+}
+
+function addToCart(id){
+  let c=JSON.parse(localStorage.cart||"[]");
+  let i=c.find(x=>x.id===id);
+  i?i.qty++:c.push({id,qty:1});
+  localStorage.cart=JSON.stringify(c);
+  renderCart();
+}
+
+function renderCart(){
+  let c=JSON.parse(localStorage.cart||"[]");
+  let p=JSON.parse(localStorage.products||"[]");
+  let t=0;
+  cart.innerHTML=c.map(x=>{
+    let pr=p.find(a=>a.id===x.id);
+    if(!pr) return "";
+    let s=pr.price*x.qty; t+=s;
+    return `${pr.name} x${x.qty} = ₵${s}`;
+  }).join("<br>");
+  total.innerText="Total: ₵"+t;
+}
+
+function checkout(){
+  if(!JSON.parse(localStorage.cart||"[]").length) return alert("Cart empty");
+  let o={id:Date.now(),date:new Date().toLocaleString()};
+  let orderList=JSON.parse(localStorage.orders||"[]");
+  orderList.unshift(o);
+  localStorage.orders=JSON.stringify(orderList);
+  localStorage.cart="[]";
+  alert("Payment Successful ✅");
+  renderCart(); renderOrders();
+}
+
+function renderOrders(){
+  let o=JSON.parse(localStorage.orders||"[]");
+  orders.innerHTML=o.map(x=>`<div class="card">Order #${x.id}<br>${x.date}</div>`).join("");
+}
+
+/* ===== INIT ===== */
+initDB();
+renderShop();
+renderCart();
+renderAdminProducts();
+renderOrders();
+
+</script>
+</body>
+</html>
