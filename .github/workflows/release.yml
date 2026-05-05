@@ -1,0 +1,48 @@
+name: "Complete Repo Permanent Backup"
+
+on:
+  push:
+    branches:
+      - main # Runs every time you push to the main branch
+
+permissions:
+  contents: write # Allows the action to create tags and upload files to releases
+
+jobs:
+  backup-all-contents:
+    runs-on: ubuntu-24.04 # Latest stable runner
+    steps:
+      - name: Checkout All Files
+        uses: actions/checkout@v6 # Latest version for Node.js 24 compatibility
+        with:
+          fetch-depth: 0 # Ensures all history and files are pulled
+
+      - name: Generate Version Tag
+        id: vars
+        run: |
+          # Creates a unique version name based on the date and build number
+          TAG_NAME="v$(date +'%Y.%m.%d')-${{ github.run_number }}"
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          
+          # Set up Git and push the new tag to your repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+
+      - name: Create Complete ZIP Archive
+        run: |
+          # Bundles EVERYTHING in the current directory into a single zip file.
+          # The -r flag makes it recursive (includes all subfolders).
+          # The -x "*.git*" flag prevents the bulky internal Git history from bloating the zip.
+          zip -r full-repo-backup-${{ steps.vars.outputs.tag }}.zip . -x "*.git*"
+
+      - name: Publish Release with Backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Uses the GitHub CLI to create the release and attach the zip archive
+          gh release create ${{ steps.vars.outputs.tag }} \
+            --title "Full Backup ${{ steps.vars.outputs.tag }}" \
+            --notes "Permanent snapshot of all repository files and folders." \
+            full-repo-backup-${{ steps.vars.outputs.tag }}.zip
